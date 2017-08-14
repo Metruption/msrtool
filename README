@@ -14,3 +14,7 @@ This is heavily based on the work from Damien Bobillot, who wrote the Python
 driver for the MSR605's serial interface. I only wrapped a nicer frontend around.
 
 As Damien's work is GPL, this is licensed under the terms of the GPL, too.
+
+setup.sh will create a virtualenv and install the dependencies in the virtual enviornment
+
+run.sh will activate the virtualenv and run the program inside the virtualenv
