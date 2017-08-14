@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 #
 # File: msr.py
-# Version: 1.1
-# Author: Damien Bobillot (damien.bobillot.2002+msr@m4x.org)
+# Version: 2.0.0
+# Author: Damien Bobillot (damien.bobillot.2002+msr@m4x.org) ported to python3 by Aaron Thomas (1d20m6@gmail.com)
 # Licence: GNU GPL version 3
-# Compatibility: tested with python 2.7 on Mac OS X, should work with any python installations.
-#         
-# Driver for the magnetic strip card reader/writer MSR605, and other versions
-# 
+# Compatibility: unknown, once I have the kernel module drivers required to run this I will test it
+#        in the future it will be tested with python 3.6.2 on Fedora 26, should work with any python installations.
+#
+# Driver wrapper for the magnetic strip card reader/writer MSR605, and other versions
+#
 # june 2011 - 1.0 - First version
 # july 2011 - 1.1 - raw read/write, set loco/hico, set density
-# 
+# Augist 017 - 2.0.0 - Ported to python3 and switched to proper semantic versioning
+#
 
 import time
 import serial
@@ -20,15 +22,15 @@ class msr(serial.Serial):
     # protocol
     escape_code = "\x1B"
     end_code = "\x1C"
-    
+
     # for set_coercivity
     hico=True
     loco=False
-    
+
     # for set_bpi
     hibpi=True
     lobpi=False
-    
+
     # for pack/unpack
     track1_map  = " !\"#$%&'()*+`,./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
     track23_map = "0123456789:;<=>?"
@@ -38,22 +40,22 @@ class msr(serial.Serial):
     rev6bit_map = [0,32,16,48,8,40,24,56,4,36,20,52,12,44,28,60,2,34,18,50,10,42,26,58,6,38,22,54,14,46,30,62, \
                    1,33,17,49,9,41,25,57,5,37,21,53,13,45,29,61,3,35,19,51,11,43,27,59,7,39,23,55,15,47,31,63]
                   # give the reverse bitmap (6 bits) of a the index
-    
+
     def __init__(self, dev_path):
         if dev_path.find("/") == -1: dev_path = "/dev/" + dev_path
         serial.Serial.__init__(self,dev_path,9600,8,serial.PARITY_NONE,timeout=0)
         self.reset()
-    
+
     def __execute_noresult(self, command):
         self.write(msr.escape_code+command)
         time.sleep(0.1)
-    
+
     def __execute_waitresult(self, command, timeout=10):
         # execute
         self.flushInput()
         self.write(msr.escape_code+command)
         time.sleep(0.1)
-        
+
         # get result
         self.timeout=timeout
         result = self.read()
@@ -61,14 +63,14 @@ class msr(serial.Serial):
         if result == "": raise Exception("operation timed out")
         self.timeout=0
         result += self.read(1000)
-        
+
         # parse result : status, result, data
         pos = result.rindex(msr.escape_code)
         return result[pos+1], result[pos+2:], result[0:pos]
 
     def reset(self):
         self.__execute_noresult("a")
-    
+
     @staticmethod
     def __decode_isodatablock(data):
         # header and end
@@ -76,7 +78,7 @@ class msr(serial.Serial):
             raise Exception("bad datablock : don't start with <ESC>s<ESC>[01]", data)
         if data[-2:] != "?"+msr.end_code:
             raise Exception("bad datablock : don't end with ?<FS>", data)
-        
+
         # first strip
         strip1_start = 4
         strip1_end = data.index(msr.escape_code,strip1_start)
@@ -96,7 +98,7 @@ class msr(serial.Serial):
             strip2 = None
         else:
             strip2 = data[strip2_start:strip2_end]
-        
+
         # third strip
         strip3_start = strip2_end+2
         if data[strip2_end:strip3_start] != msr.escape_code+"\x03":
@@ -105,20 +107,20 @@ class msr(serial.Serial):
             strip3 = None
         else:
             strip3 = data[strip3_start:-2]
-        
+
         return strip1, strip2, strip3
-    
+
     @staticmethod
     def __encode_isodatablock(strip1, strip2, strip3):
         # use empty string if you don't want to set a given strip
         return "\x1bs\x1b\x01"+strip1+"\x1b\x02"+strip2+"\x1b\x03"+strip3+"?\x1C"
-    
+
     @staticmethod
     def __decode_rawdatablock(data):
         # header
         if data[0:4] != msr.escape_code+"s"+msr.escape_code+"\x01":
             raise Exception("bad datablock : don't start with <ESC>s<ESC>[01]", data)
-        
+
         # first strip
         strip1_start = 4
         strip1_end = strip1_start + 1 + ord(data[strip1_start]) # first byte is length
@@ -130,7 +132,7 @@ class msr(serial.Serial):
             raise Exception("bad datablock : missing <ESC>[02] at position %d" % strip1_end, data)
         strip2_end = strip2_start + 1 + ord(data[strip2_start])
         strip2 = data[strip2_start+1:strip2_end]
-        
+
         # third strip
         strip3_start = strip2_end+2
         if data[strip2_end:strip3_start] != msr.escape_code+"\x03":
@@ -141,7 +143,7 @@ class msr(serial.Serial):
         # trailer
         if data[strip3_end:] != "?"+msr.end_code:
             raise Exception("bad datablock : missing ?<FS> at position %d", strip3_end, data)
-                
+
         return strip1, strip2, strip3
 
     @staticmethod
@@ -157,7 +159,7 @@ class msr(serial.Serial):
         datablock += "?\x1C"
         return datablock
         #return "\x1bs\x1b\x01"+chr(len(strip1))+strip1+"\x1b\x02"+chr(len(strip2))+strip2+"\x1b\x03"+chr(len(strip3))+strip3+"?\x1C"
-    
+
     @staticmethod
     def pack_raw(data, mapping, bcount_code, bcount_output):
         # data : string to be encoded
@@ -191,7 +193,7 @@ class msr(serial.Serial):
         if rem_count > 0:
             raw += chr(rem_bits)
         return raw
-    
+
     @staticmethod
     def unpack_raw(raw, mapping, bcount_code, bcount_output):
         # raw : string to be encoded
@@ -213,25 +215,25 @@ class msr(serial.Serial):
                 rem_count -= bcount_code+1
                 i = rem_bits >> rem_count
                 rem_bits &= ((1<<rem_count)-1)
-                
+
                 # reverse bits (assume bcount_code<=6)
                 p = i & 0x1 # parity code
                 i = msr.rev6bit_map[i>>1] >> (6-bcount_code)
                 data += mapping[i]
                 if i != 0: last_non_null = len(data)-1
-                
+
                 # check parity
                 lrc ^= i
                 if msr.parity_map[i] == p:
                     parity_errors += " "
                 else:
                     parity_errors += "^"
-                
+
         # check LRC (kept at the end of decoded data)
         lrc_error = (lrc != 0)
-        
+
         return data[0:last_non_null+1], len(data), parity_errors[0:last_non_null+1], lrc_error
-        
+
     def read_tracks(self):
         status, _, data = self.__execute_waitresult("r")
         if status != "0":
@@ -264,7 +266,7 @@ class msr(serial.Serial):
         status, _, _ = self.__execute_waitresult("c"+chr(mask))
         if status != "0":
             raise Exception("erase error : %c" % status)
-    
+
     #def set_leadingzero(self, track13, track2):
     #    status, result, _ = self.__execute_waitresult("o"+chr(bpc1)+chr(bpc2)+chr(bpc3))
     #    if status != "0":
@@ -297,7 +299,7 @@ class msr(serial.Serial):
             raise Exception("set_hico error : %c" % status)
 
 if __name__ == "__main__":
-    # parse arguments
+    # parse arguments <- what a useful comment
     import argparse
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
@@ -313,12 +315,12 @@ if __name__ == "__main__":
     parser.add_argument('-B', '--bpc', help="bit per caracters for each track (5 to 8)")
     parser.add_argument('data', nargs="*", help="(write only) 1, 2 or 3 arguments, matching --tracks")
     args = parser.parse_args();
-    
+
     if (args.read or args.erase) and len(args.data) != 0 or args.write and (len(args.data) != len(args.tracks)):
-        print "too many arguments"
+        print("too many arguments") #@todo(aaron): make it raise an exception instead of printing (?)maybe
         parser.print_help()
         exit(1)
-    
+
     tracks = [False, False, False]
     data = ["", "", ""]
     for i in range(0,len(args.tracks)):
@@ -344,14 +346,14 @@ if __name__ == "__main__":
         bpi1 = args.bpi[0] != "l"
         bpi2 = args.bpi[1] != "l"
         bpi3 = args.bpi[2] != "l"
-    
+
     # main code
     try:
         dev = msr(args.device)
-        
+
         if args.bpc:
             dev.set_bpc(bpc1,bpc2,bpc3)
-        
+
         if args.read & args.raw:
             s1,s2,s3 = dev.read_raw_tracks()
             def print_result(num, res):
@@ -359,18 +361,25 @@ if __name__ == "__main__":
                 line = "%d=%s" % (num, s)
                 if len(s) != l: line += " (+%d null)" % (l-len(s))
                 if lerr: line += " (LRC error)"
-                print line
-                if -1 != perr.find("^"): print "  %s <- parity errors" % perr
-            if tracks[0]: print_result(1, msr.unpack_raw(s1, msr.track1_map,  6, bpc1))
-            if tracks[1]: print_result(2, msr.unpack_raw(s2, msr.track23_map, 4, bpc2))
-            if tracks[2]: print_result(3, msr.unpack_raw(s3, msr.track23_map, 4, bpc3))
-        
+                print(line) #@todo(aaron) determine why this is printed and have it raise an exception instead
+                if -1 != perr.find("^"): #@todo(aaron): figure out the sexiest way to condense these jagged lines
+                    print( "{}{}".format(perr, "<- parity errors")) #see comment 2 lines above
+            if tracks[0]:
+                print_result(1, msr.unpack_raw(s1, msr.track1_map,  6, bpc1))
+            if tracks[1]:
+                print_result(2, msr.unpack_raw(s2, msr.track23_map, 4, bpc2))
+            if tracks[2]:
+                print_result(3, msr.unpack_raw(s3, msr.track23_map, 4, bpc3))
+
         elif args.read: # iso mode
             s1,s2,s3 = dev.read_tracks()
-            if tracks[0]: print "1=%s" % s1
-            if tracks[1]: print "2=%s" % s2
-            if tracks[2]: print "3=%s" % s3
-        
+            if tracks[0]:#@todo(aaron): LOL i wrote the same comments just above this
+                print("{}{}".format("1=",s1))
+            if tracks[1]:
+                print("{}{}".format("2=",s2))
+            if tracks[2]:
+                print("{}{}".format("3=",s3))
+
         elif args.write & args.raw:
             d1 = ""
             d2 = ""
@@ -382,21 +391,21 @@ if __name__ == "__main__":
             if tracks[2]:
                 d3 = msr.pack_raw(data[2], msr.track23_map, 4, bpc3)
             dev.write_raw_tracks(d1,d2,d3)
-            
+
         elif args.write: # iso mode
             dev.write_tracks(data[0],data[1],data[2])
-        
+
         elif args.erase:
             dev.erase_tracks(tracks[0],tracks[1],tracks[2])
 
         elif args.loco:
             dev.set_coercivity(msr.loco)
-            
+
         elif args.hico:
             dev.set_coercivity(msr.hico)
 
         elif args.bpi:
             dev.set_bpi(bpi1,bpi2,bpi3)
-        
+
     except Exception as e:
-        print e
+        print(e)
